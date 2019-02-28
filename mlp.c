@@ -3,8 +3,6 @@
 #include <math.h>
 #include <assert.h>
 
-#include "mlp.h"
-
 // TODO: wrap static variables in a "state", struct
 size_t layer_count;
 size_t layer_sizes[5];
