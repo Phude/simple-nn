@@ -23,6 +23,62 @@ float biases[10 * 1000];
 
 float current_input[10 * 1000];
 float z[10000];
+//float activations[10 * 1000];
+
+// math
+// void linear_transform(float *result, float *a, float *x, float *b, size_t in_len, size_t out_len) {
+// 	for (int j = 0; j < out_len; ++j) {
+// 		for (int i = 0; i < in_len; ++i) {
+// 			result[j] += a[j * in_len + i] * x[i];
+// 		}
+// 		result[j] += b[j];
+// 	}
+// }
+
+// float *vec_add(float *result, float *v1, float *v2, size_t len) {
+// 	for (int i = 0; i < len; ++i) {
+// 		result[i] = v1[i] + v2[i];
+// 	}
+// }
+
+
+// my reLUs are leaky
+#define LEAK 50.0
+float reLU(float n) {
+	if(n >= 0.0)
+		return n;
+	else
+		return n / LEAK;
+}
+
+float reLU_derivative(float n) {
+	if (n >= 0.0)
+		return 1.0;
+	else
+		return 1.0 / LEAK;
+}
+
+float sigmoid(float n) {
+	double ex = exp(n);
+	double r = ex / (1 + ex);
+	return r;
+}
+
+float sigmoid_derivative(float n) {
+	double ex = exp(n);
+	double r = ex / ((1 + ex) * (1 + ex));
+	return r;
+}
+
+float cf(float a, float y) {
+	return 2 * (a - y) * (a - y);
+}
+
+float cf_derivative(float a, float y) {
+	return (a - y);
+}
+
+// not math
 
 size_t get_weight_index(size_t l, size_t j, size_t k) {
 	return weight_indexes[l - 1] + j * layer_sizes[l - 1] + k;
@@ -45,38 +101,13 @@ float *get_bias(size_t l, size_t j) {
 	return &biases[bias_indexes[l - 1] + j];
 }
 
-// math
-// void linear_transform(float *result, float *a, float *x, float *b, size_t in_len, size_t out_len) {
-// 	for (int j = 0; j < out_len; ++j) {
-// 		for (int i = 0; i < in_len; ++i) {
-// 			result[j] += a[j * in_len + i] * x[i];
-// 		}
-// 		result[j] += b[j];
-// 	}
-// }
-
-// float *vec_add(float *result, float *v1, float *v2, size_t len) {
-// 	for (int i = 0; i < len; ++i) {
-// 		result[i] = v1[i] + v2[i];
-// 	}
-// }
-
-float af(float n) {
-	float ex = exp(n);
-	return ex / (1 + ex);
+// TODO: it feels a little strange that this in the only get_* functions that returns a value as opposed to a pointer
+float get_a(size_t l, size_t j) {
+	return reLU(*get_z(l, j));
 }
 
-float af_derivative(float n) {
-	float ex = exp(n);
-	return ex / ((1 + ex) * (1 + ex));
-}
-
-float cf(float a, float y) {
-	return 2 * (a - y) * (a - y);
-}
-
-float cf_derivative(float a, float y) {
-	return (a - y);
+float get_da(size_t l, size_t j) {
+	return reLU_derivative(*get_z(l, j));
 }
 
 void print_digit(float *input) {
@@ -90,20 +121,23 @@ void print_digit(float *input) {
 }
 
 // mlp
-// void feedforward(float *input) {
-// 	print_digit(input);
+// void feedforward() {
+// //	print_digit(input);
 
-// 	float *prev_a = input;
+// 	float *a = activations + layer_size[0];
+// 	float *prev_a = a - layer_size[0]; // == activations
 // 	for (int l = 1; l < layer_count; ++l) {
 // 		for (int j = 0; j < layer_sizes[l]; ++j) {
+// 			float new_z = 0.0f; 
 // 			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
-// 				*get_z(l, j) += prev_a[k] * *get_weight(l, j, k);
+// 				new_z += activations[k] * *get_weight(l, j, k);
+// 				prev_a[i] = af(*get_z(l, i));
 // 			}
-// 			*get_z(l, j) += *get_bias(l, j);
+
+// 			*get_z(l, j) = new_z + *get_bias(l, j);
 // 		}
 
 // 		for (int i = 0; i < layer_sizes[l]; ++i)
-// 			prev_a[i] = af(*get_z(l, i));
 // 	}
 
 // 	printf("{ ");
@@ -113,7 +147,7 @@ void print_digit(float *input) {
 // 	printf("}\n");
 // }
 
-double randn (double mu, double sigma)
+double randn(double mu, double sigma)
 {
   double U1, U2, W, mult;
   static double X1, X2;
@@ -143,52 +177,48 @@ double randn (double mu, double sigma)
 }
 
 float dot(float *v1, float *v2, size_t len) {
-		float sum = 0.0f;
-		for (int i = 0; i < len; ++i) {
-			sum += v1[i] * v2[i];
-//        	printf("sum += (%f * %f); new value of sum = %f\n", v1[i], v2[i], sum);
-		}
-		return sum;
+	float sum = 0.0f;
+	for (int i = 0; i < len; ++i) {
+		sum += v1[i] * v2[i];
+	}
+	return sum;
 }
 
 void feedforward(float *input) {
 //	print_digit(input);
-#ifndef NDEBUG
-		printf("feedforwarding...\ninput data = { ");
-		for (int i = 0; i < layer_sizes[0]; ++i) {
-			printf("%f, ", input[i]);
-		}
-		printf("}\n");
-		printf("weights = { ");
-		for (int i = 0; i < weight_count; ++i) {
-			printf("%f, ", weights[i]);
-		}
-		printf("}\n");
-		printf("biases = { ");
-		for (int i = 0; i < bias_count; ++i) {
-			printf("%f, ", biases[i]);
-		}
-		printf("}\n");
-#endif
+// #ifndef NDEBUG
+// 		printf("feedforwarding...\ninput data = { ");
+// 		for (int i = 0; i < layer_sizes[0]; ++i) {
+// 			printf("%f, ", input[i]);
+// 		}
+// 		printf("}\n");
+// 		printf("weights = { ");
+// 		for (int i = 0; i < weight_count; ++i) {
+// 			printf("%f, ", weights[i]);
+// 		}
+// 		printf("}\n");
+// 		printf("biases = { ");
+// 		for (int i = 0; i < bias_count; ++i) {
+// 			printf("%f, ", biases[i]);
+// 		}
+// 		printf("}\n");
+// #endif
 
 		int l = 1;
 		for (int j = 0; j < layer_sizes[l]; ++j) {
-				*get_z(l, j) = *get_bias(l, j) + dot(input, get_weight(l, j, 0), layer_sizes[l - 1]);
+			*get_z(l, j) = *get_bias(l, j) + dot(input, get_weight(l, j, 0), layer_sizes[l - 1]);
 		}
 
 		for (l = 2; l < layer_count; ++l) {
-//				printf("activations in layer %d = { ", l - 1);
-				float prev_activations[layer_sizes[l - 1]];
-				for (int k = 0; k < layer_sizes[l - 1]; ++k) {
-						prev_activations[k] = af(*get_z(l - 1, k));
-	//                    printf("%f, ", af(*get_z(l - 1, k)));
-				}
-				for (int j = 0; j < layer_sizes[l]; ++j) {
-						*get_z(l, j) = *get_bias(l, j) + dot(prev_activations, get_weight(l, j, 0), layer_sizes[l - 1]);
-						//printf("adding bias: %f\n", *get_bias(l, j));
-				}
+			float prev_activations[layer_sizes[l - 1]];
+			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
+				prev_activations[k] = get_a(l - 1, k);
+			}
+			for (int j = 0; j < layer_sizes[l]; ++j) {
+				*get_z(l, j) = *get_bias(l, j) + dot(prev_activations, get_weight(l, j, 0), layer_sizes[l - 1]);
+				//printf("adding bias: %f\n", *get_bias(l, j));
 		}
-
+	}
 #ifndef NDEBUG
 		printf("z = { ");
 		for (int i = 0; i < bias_count; ++i) {
@@ -206,9 +236,9 @@ void update_gradients(float *in, float *y, float *weight_gradient, float *bias_g
 	// output layer
 	for (int j = 0; j < layer_sizes[l]; ++j) {
 		float z = *get_z(l, j);
-		float a = af(z);
+		float a = get_a(l, j);
 //		printf("cf_D: %d => %f\n", j, cf_derivative(a, y[j]) * af_derivative(z));
-		error[get_z_index(l, j)] = cf_derivative(a, y[j]) * af_derivative(z);
+		error[get_z_index(l, j)] = cf_derivative(a, y[j]) * get_da(l, j);
 	}
 
 	// other layers
@@ -218,7 +248,7 @@ void update_gradients(float *in, float *y, float *weight_gradient, float *bias_g
 			for (int j = 0; j < layer_sizes[l + 1]; ++j) {
 				sum += *get_weight(l + 1, j, k) * error[get_z_index(l + 1, j)];
 			}
-			error[get_z_index(l, k)] = sum * af_derivative(*get_z(l, k));
+			error[get_z_index(l, k)] = sum * get_da(l, k);
 		}
 	}
 	
@@ -234,7 +264,7 @@ void update_gradients(float *in, float *y, float *weight_gradient, float *bias_g
 			bias_gradient[get_z_index(l, j)] += error[get_z_index(l, j)];
 //			printf("new bias gradient at neuron %d in layer %d == %f\n", j, l, bias_gradient[get_z_index(l, j)]);
 			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
-				float a = l > 1 ? af(*get_z(l - 1, k)) : in[k];
+				float a = l > 1 ? get_a(l -1, k) : in[k];
 				weight_gradient[get_weight_index(l, j, k)] += a * error[get_z_index(l, j)];
 //				printf("new weight gradient from neuron %d to %d in layer %d == %f\n", k, j, l, weight_gradient[get_weight_index(l, j, k)]);
 			}
@@ -265,7 +295,6 @@ void descend_gradient(float *in, float *y, size_t len) {
 		}
 		printf("\n");
 #endif
-		//printf("next image should be a %u", y[i]);
 		feedforward(&in[i * layer_sizes[0]]);
 		update_gradients(&in[i * layer_sizes[0]], &y[i * layer_sizes[layer_count - 1]], weight_gradient, bias_gradient);
 	}
@@ -281,7 +310,7 @@ void descend_gradient(float *in, float *y, size_t len) {
 	}
 #endif
 	// descend gradient
-	#define SPEED 3.0
+	#define SPEED 0.001f
 	for (int l = layer_count - 1; l > 0; --l) {
 		for (int j = 0; j < layer_sizes[l]; ++j) {
 			*get_bias(l, j) -= (SPEED / (float)len) * bias_gradient[get_z_index(l, j)];
@@ -308,6 +337,17 @@ void init(size_t lc, size_t *ls) {
 			weight_count += ls[i] * ls[i - 1];
 		}
 	}
+
+	// initialize weights and biases
+	for (int l = layer_count - 1; l > 0; --l) {
+		for (int j = 0; j < layer_sizes[l]; ++j) {
+			*get_bias(l, j) = randn(0.0, 1.0);
+			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
+				float sd = 1.0 / sqrt(layer_sizes[l - 1]);
+				*get_weight(l, j, k) = randn(0.0, sd);
+			}
+		}
+	}
 }
 
 void swap_vec(float *vecptr, size_t ia, size_t ib, size_t item_size) {
@@ -320,6 +360,32 @@ void swap_vec(float *vecptr, size_t ia, size_t ib, size_t item_size) {
 		*a = *b;
 		*b = tmp;
 	}
+}
+
+void test(float *tdata, float *labels, size_t len) {
+	printf("running tests...\n");
+	float score = 0;
+	for (int i = 0; i < len; ++i) {
+		print_digit(&tdata[layer_sizes[0] * i]);
+		feedforward(&tdata[layer_sizes[0] * i]);
+
+		// inteprate output layer
+		uint8_t guess;
+		float highest_val = 0.0f;
+		for (int j = 0; j < layer_sizes[layer_count - 1]; ++j) {
+			float a = get_a(layer_count - 1, j);
+			if (a > highest_val) {
+				highest_val = a;
+				guess = j;
+			}
+		}
+		printf("my guess for this training example is %d\n", guess);
+
+		if (guess == labels[i])
+			score += 1.0;
+	}
+	score /= len;
+	printf(" score = %f\n", score);
 }
 
 // testmain
@@ -343,7 +409,7 @@ int main(int argc, char **argv) {
 	float *labels = malloc(entries * layer_sizes[layer_count - 1] * sizeof(float));
 
 	if (argc == 1) goto noinput;
-	// read in image data
+	// read in training image data
 	FILE *fp;
 	fp = fopen(argv[1], "rb");
 
@@ -352,7 +418,8 @@ int main(int argc, char **argv) {
 		images[i] = (float)fgetc(fp) / 255.0;
 	}
 
-	// read in label data
+	// read in training label data
+
 	fp = fopen(argv[2], "rb");
 
 	fseek(fp, 8, SEEK_SET);
@@ -364,21 +431,30 @@ int main(int argc, char **argv) {
 			labels[i * layer_sizes[layer_count - 1] + j] = tmp;
 		}
 	}
-noinput:
-	// initialize weights and biases
-	for (int l = layer_count - 1; l > 0; --l) {
-		for (int j = 0; j < layer_sizes[l]; ++j) {
-			*get_bias(l, j) = randn(0.0, 1.0);
-			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
-				float sd = 1.0 / sqrt(layer_sizes[l - 1]);
-				*get_weight(l, j, k) = sd;
-			}
-		}
+
+	// ===============================fml
+	#define TESTING_ENTRIES 10 * 1000
+	float *testing_images = malloc(TESTING_ENTRIES * layer_sizes[0] * sizeof(float));
+	float *testing_labels = malloc(TESTING_ENTRIES * sizeof(float));
+	// read in testing image data
+	fp = fopen(argv[3], "rb");
+
+	fseek(fp, 16, SEEK_SET);
+	for (int i = 0; i < TESTING_ENTRIES * rows * columns; ++i) {
+		testing_images[i] = (float)fgetc(fp) / 255.0;
 	}
 
-	printf("layer_count = %zu, final_layer_size = %zu\n", layer_count, layer_sizes[layer_count - 1]);
+	// read in testing label data
+	fp = fopen(argv[4], "rb");
 
-	if (argc != 0) goto yesinput;
+	fseek(fp, 8, SEEK_SET);
+	for (int i = 0; i < TESTING_ENTRIES; ++i) {
+		testing_labels[i] = (float)fgetc(fp);
+	}
+
+	goto yesinput;
+noinput:
+	printf("layer_count = %zu, final_layer_size = %zu\n", layer_count, layer_sizes[layer_count - 1]);
 	// generate training data
 	#define TRAINING_DATA_COUNT 60000
 	for (int i = 0; i < TRAINING_DATA_COUNT; ++i) {
@@ -396,8 +472,8 @@ noinput:
 
 yesinput:
 #ifdef TRAINING_MODE
-	#define BATCH_SIZE 20
-	for (int epoch = 0; epoch < 300; ++epoch) {
+	#define BATCH_SIZE 5
+	for (int epoch = 0; epoch < 30; ++epoch) {
 		// shuffle training data (and labels)
 		printf("shuffling training data...");
 		for (int i = TRAINING_DATA_COUNT - 1; i > 1; --i) {
@@ -428,7 +504,7 @@ yesinput:
 					printf("}\n");
 			printf("my guess is: { ");
 			for (int i = 0; i < layer_sizes[layer_count - 1]; ++i) {
-				printf("%0.2f, ", af(*get_z(layer_count - 1, i)));
+				printf("%0.2f, ", get_a(layer_count - 1, i));
 			}
 			printf("}\n");
 		}
@@ -443,7 +519,7 @@ yesinput:
 			int which = (rand() % BATCH_SIZE);
 			feedforward(&images[which * layer_sizes[0]]);
 			printf("bits to xor: %0.1f, %0.1f\n", images[which * 2], images[which * 2 + 1]);
-			printf("my guess is: %f\n", af(*get_z(layer_count - 1, 0)));
+			printf("my guess is: %f\n", get_a(layer_count - 1, 0));
 		}
 	}
 	else {
@@ -453,10 +529,11 @@ yesinput:
 			print_digit(&images[which * layer_sizes[0]]);
 			printf("my guess is: { ");
 			for (int i = 0; i < layer_sizes[layer_count - 1]; ++i) {
-				printf("%f, ", af(*get_z(layer_count - 1, i)));
+				printf("%f, ", get_a(layer_count - 1, i));
 			}
 			printf("}\n");
 		}
 	}
 
+	test(testing_images, testing_labels, TESTING_ENTRIES);
 }
