@@ -310,11 +310,13 @@ void descend_gradient(float *in, float *y, size_t len) {
 	}
 #endif
 	// descend gradient
-	#define SPEED 0.001f
+	#define SPEED 0.005f
+	#define DECAY 0.0001f
 	for (int l = layer_count - 1; l > 0; --l) {
 		for (int j = 0; j < layer_sizes[l]; ++j) {
 			*get_bias(l, j) -= (SPEED / (float)len) * bias_gradient[get_z_index(l, j)];
 			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
+				*get_weight(l, j, k) *= (1.0f - (SPEED * DECAY));
 				*get_weight(l, j, k) -= (SPEED / (float)len) * weight_gradient[get_weight_index(l, j, k)];
 			}
 		}
@@ -388,6 +390,11 @@ void test(float *tdata, float *labels, size_t len) {
 	printf(" score = %f\n", score);
 }
 
+#define TRAINING_SET "./mnist/training-images"
+#define TRAINING_LABELS "./mnist/training-labels"
+#define TESTING_SET "./mnist/testing-images"
+#define TESTING_LABELS "./mnist/testing-labels"
+
 // testmain
 #define TRAINING_MODE
 int main(int argc, char **argv) {
@@ -400,18 +407,14 @@ int main(int argc, char **argv) {
 	size_t ls_xor[] = { 2, 4, 4, 1 };
 	size_t ls_digits[] = {28 * 28, 15, 10 };
 
-	if (argc != 1)
-		init(3, ls_digits);
-	else
-		init(4, ls_xor);
+	init(3, ls_digits);
 
 	float *images = malloc(entries * layer_sizes[0] * sizeof(float));
 	float *labels = malloc(entries * layer_sizes[layer_count - 1] * sizeof(float));
 
-	if (argc == 1) goto noinput;
 	// read in training image data
 	FILE *fp;
-	fp = fopen(argv[1], "rb");
+	fp = fopen(TRAINING_SET, "rb");
 
 	fseek(fp, 16, SEEK_SET);
 	for (int i = 0; i < entries * rows * columns; ++i) {
@@ -420,7 +423,7 @@ int main(int argc, char **argv) {
 
 	// read in training label data
 
-	fp = fopen(argv[2], "rb");
+	fp = fopen(TRAINING_LABELS, "rb");
 
 	fseek(fp, 8, SEEK_SET);
 	for (int i = 0; i < entries; ++i) {
@@ -437,7 +440,7 @@ int main(int argc, char **argv) {
 	float *testing_images = malloc(TESTING_ENTRIES * layer_sizes[0] * sizeof(float));
 	float *testing_labels = malloc(TESTING_ENTRIES * sizeof(float));
 	// read in testing image data
-	fp = fopen(argv[3], "rb");
+	fp = fopen(TESTING_SET, "rb");
 
 	fseek(fp, 16, SEEK_SET);
 	for (int i = 0; i < TESTING_ENTRIES * rows * columns; ++i) {
@@ -445,32 +448,14 @@ int main(int argc, char **argv) {
 	}
 
 	// read in testing label data
-	fp = fopen(argv[4], "rb");
+	fp = fopen(TESTING_LABELS, "rb");
 
 	fseek(fp, 8, SEEK_SET);
 	for (int i = 0; i < TESTING_ENTRIES; ++i) {
 		testing_labels[i] = (float)fgetc(fp);
 	}
 
-	goto yesinput;
-noinput:
-	printf("layer_count = %zu, final_layer_size = %zu\n", layer_count, layer_sizes[layer_count - 1]);
-	// generate training data
-	#define TRAINING_DATA_COUNT 60000
-	for (int i = 0; i < TRAINING_DATA_COUNT; ++i) {
-		int in1 = (rand() & 1);
-		int in2 = (rand() & 1);
-
-		images[i * 2] = (float)in1;
-		images[i * 2 + 1] = (float)in2;
-		labels[i] = in1 ^ in2;
-	}
-	// printf("training data sanity check: \n");
-	// for (int i = 0; i < TRAINING_DATA_COUNT; ++i) {
-	// 	printf("%0.2f XOR %0.2f is %0.2f\n", images[i * 2], images[i * 2 + 1], labels[i]);
-	// }
-
-yesinput:
+#define TRAINING_DATA_COUNT 60 * 1000
 #ifdef TRAINING_MODE
 	#define BATCH_SIZE 5
 	for (int epoch = 0; epoch < 30; ++epoch) {
