@@ -1,4 +1,4 @@
 CC=clang
 
 main:
-	$(CC) mlp.c
+	$(CC) mlp.c -lm
