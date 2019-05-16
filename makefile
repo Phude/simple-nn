@@ -1,4 +1,6 @@
-CC=clang
+CC = clang
+CFLAGS = -Wall
+LDFLAGS = -lm
 
 main:
-	$(CC) mlp.c -lm
+	$(CC) src/mlp.c $(CFLAGS) $(LDFLAGS)

@@ -70,9 +70,9 @@ float sigmoid_derivative(float n) {
 	return r;
 }
 
-float cf(float a, float y) {
-	return 2 * (a - y) * (a - y);
-}
+// float cf(float a, float y) {
+// 	return 0.5f * (a - y) * (a - y);
+// }
 
 float cf_derivative(float a, float y) {
 	return (a - y);
@@ -101,7 +101,7 @@ float *get_bias(size_t l, size_t j) {
 	return &biases[bias_indexes[l - 1] + j];
 }
 
-// TODO: it feels a little strange that this in the only get_* functions that returns a value as opposed to a pointer
+// TODO: it feels a little strange that this in the only get_* function that returns a value as opposed to a pointer
 float get_a(size_t l, size_t j) {
 	return reLU(*get_z(l, j));
 }
@@ -120,60 +120,31 @@ void print_digit(float *input) {
 	}
 }
 
-// mlp
-// void feedforward() {
-// //	print_digit(input);
-
-// 	float *a = activations + layer_size[0];
-// 	float *prev_a = a - layer_size[0]; // == activations
-// 	for (int l = 1; l < layer_count; ++l) {
-// 		for (int j = 0; j < layer_sizes[l]; ++j) {
-// 			float new_z = 0.0f; 
-// 			for (int k = 0; k < layer_sizes[l - 1]; ++k) {
-// 				new_z += activations[k] * *get_weight(l, j, k);
-// 				prev_a[i] = af(*get_z(l, i));
-// 			}
-
-// 			*get_z(l, j) = new_z + *get_bias(l, j);
-// 		}
-
-// 		for (int i = 0; i < layer_sizes[l]; ++i)
-// 	}
-
-// 	printf("{ ");
-// 	for (int i = 0; i < layer_sizes[layer_count - 1]; ++i) {
-// 	 	printf("%0.2f, ", af(*get_z(layer_count - 1, i)));
-// 	}
-// 	printf("}\n");
-// }
-
 double randn(double mu, double sigma)
 {
-  double U1, U2, W, mult;
-  static double X1, X2;
-  static int call = 0;
+	double U1, U2, W, mult;
+	static double X1, X2;
+	static int call = 0;
  
-  if (call == 1)
-	{
-	  call = !call;
-	  return (mu + sigma * (double) X2);
+	if (call == 1) {
+		call = !call;
+		return (mu + sigma * (double) X2);
 	}
  
-  do
-	{
-	  U1 = -1 + ((double) rand () / RAND_MAX) * 2;
-	  U2 = -1 + ((double) rand () / RAND_MAX) * 2;
-	  W = pow (U1, 2) + pow (U2, 2);
+	do {
+		U1 = -1 + ((double) rand () / RAND_MAX) * 2;
+		U2 = -1 + ((double) rand () / RAND_MAX) * 2;
+		W = pow (U1, 2) + pow (U2, 2);
 	}
-  while (W >= 1 || W == 0);
+	while (W >= 1 || W == 0);
  
-  mult = sqrt ((-2 * log (W)) / W);
-  X1 = U1 * mult;
-  X2 = U2 * mult;
+	mult = sqrt ((-2 * log (W)) / W);
+	X1 = U1 * mult;
+	X2 = U2 * mult;
  
-  call = !call;
+	call = !call;
  
-  return (mu + sigma * (double) X1);
+	return (mu + sigma * (double) X1);
 }
 
 float dot(float *v1, float *v2, size_t len) {
@@ -235,7 +206,7 @@ void update_gradients(float *in, float *y, float *weight_gradient, float *bias_g
 	int l = layer_count - 1;
 	// output layer
 	for (int j = 0; j < layer_sizes[l]; ++j) {
-		float z = *get_z(l, j);
+//		float z = *get_z(l, j); // TODO why was this here?
 		float a = get_a(l, j);
 //		printf("cf_D: %d => %f\n", j, cf_derivative(a, y[j]) * af_derivative(z));
 		error[get_z_index(l, j)] = cf_derivative(a, y[j]) * get_da(l, j);
@@ -404,10 +375,9 @@ int main(int argc, char **argv) {
 	int32_t columns = 28;
 
 	// init network
-	size_t ls_xor[] = { 2, 4, 4, 1 };
-	size_t ls_digits[] = {28 * 28, 15, 10 };
+	size_t ls_digits[] = {28 * 28, 15, 15, 10 };
 
-	init(3, ls_digits);
+	init(4, ls_digits);
 
 	float *images = malloc(entries * layer_sizes[0] * sizeof(float));
 	float *labels = malloc(entries * layer_sizes[layer_count - 1] * sizeof(float));
@@ -455,10 +425,10 @@ int main(int argc, char **argv) {
 		testing_labels[i] = (float)fgetc(fp);
 	}
 
-#define TRAINING_DATA_COUNT 60 * 1000
+#define TRAINING_DATA_COUNT 3 * 1000
 #ifdef TRAINING_MODE
 	#define BATCH_SIZE 5
-	for (int epoch = 0; epoch < 30; ++epoch) {
+	for (int epoch = 0; epoch < 3; ++epoch) {
 		// shuffle training data (and labels)
 		printf("shuffling training data...");
 		for (int i = TRAINING_DATA_COUNT - 1; i > 1; --i) {
@@ -498,26 +468,15 @@ int main(int argc, char **argv) {
 #else
 
 #endif
-
-	if (argc == 1) {
-		for(int i = 0; i < 10; ++i) {
-			int which = (rand() % BATCH_SIZE);
-			feedforward(&images[which * layer_sizes[0]]);
-			printf("bits to xor: %0.1f, %0.1f\n", images[which * 2], images[which * 2 + 1]);
-			printf("my guess is: %f\n", get_a(layer_count - 1, 0));
+	for(int i = 0; i < 5; ++i) {
+		int which = (rand() % TRAINING_DATA_COUNT);
+		feedforward(&images[which * layer_sizes[0]]);
+		print_digit(&images[which * layer_sizes[0]]);
+		printf("my guess is: { ");
+		for (int i = 0; i < layer_sizes[layer_count - 1]; ++i) {
+			printf("%f, ", get_a(layer_count - 1, i));
 		}
-	}
-	else {
-		for(int i = 0; i < 5; ++i) {
-			int which = (rand() % TRAINING_DATA_COUNT);
-			feedforward(&images[which * layer_sizes[0]]);
-			print_digit(&images[which * layer_sizes[0]]);
-			printf("my guess is: { ");
-			for (int i = 0; i < layer_sizes[layer_count - 1]; ++i) {
-				printf("%f, ", get_a(layer_count - 1, i));
-			}
-			printf("}\n");
-		}
+		printf("}\n");
 	}
 
 	test(testing_images, testing_labels, TESTING_ENTRIES);
